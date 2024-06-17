@@ -18,3 +18,19 @@ Hardware - Lily Grech
 Enclosure - Emmy Ploskina 
 
 Software - Daniel Richardson
+
+## Usage
+
+1. Download and Install git here: https://git-scm.com/download/win
+
+2. Open Git Bash
+
+3. Change the current working directory to the location where you want the cloned directory
+
+4. Use this git clone command in commandprompt:
+
+```bash
+git clone https://github.com/DanielRichardson1/JuniorDesignProject2.git
+```
+
+5. Press Enter to create your local clone
