@@ -1,3 +1,6 @@
+// Github Signatures Here:
+// Daniel Richardson 6/17/2024
+
 // DEFINE PINS
 
 // input
@@ -15,8 +18,8 @@ const int speakerOutput = 7;
 
 // DEFINE CONSTANTS
 
-// our 3 options to randomly pick from 
-const int choices[] = {1, 2, 3};  // to get a choice: choice = choices[random(0, 3)]
+// our 3 options to randomly pick from
+const int choices[] = {1, 2, 3}; // to get a choice: choice = choices[random(0, 3)]
 
 // DEFINE GLOBAL VARIABLES
 
@@ -44,9 +47,9 @@ unsigned long currentRoundPeriod = 3000;
 int buttonState = 0;
 int lastButtonState = 0;
 
-
 // Setup I/O
-void setup() {
+void setup()
+{
   pinMode(coinInput, INPUT);
   pinMode(pullInput, INPUT);
   pinMode(spinInput, INPUT);
@@ -58,58 +61,62 @@ void setup() {
   // interupts could be setup here
 }
 
-
-
 // Main Game Loop
-void loop() {
+void loop()
+{
   currentMillis = millis();
- 
-  checkStartGame();  // check start game to either start game or reset
-  if(runGame){
+
+  checkStartGame(); // check start game to either start game or reset
+  if (runGame)
+  {
     // If input matches choice, successful
-      // TODO
+    // TODO
     // If input does not match choice, unsuccessful
-      // TODO
-  // If time runs out, unsuccessful
-    if(currentMillis - previousMillis > currentRoundPeriod){
+    // TODO
+    // If time runs out, unsuccessful
+    if (currentMillis - previousMillis > currentRoundPeriod)
+    {
       gameOverLose();
     }
   }
-
 }
 
-
-
 // Prompt user for input
-void promptUser() {
+void promptUser()
+{
   choice = choices[random(0, 3)];
   // output sound cue of random choice
 }
 
 // Correct Button is Pressed within required time
-void successfulAttempt() {
+void successfulAttempt()
+{
   currentRound += 1;
   currentRoundPeriod -= 20.2;
   previousMillis = millis();
 
-  if(currentRound == 100){
+  if (currentRound == 100)
+  {
     gameOverWin();
   }
 
   promptUser();
 }
 
-void checkStartGame() {
+void checkStartGame()
+{
   // read the pushbutton input pin:
   buttonState = digitalRead(startGameInput);
   // compare the buttonState to its previous state
-  if (buttonState != lastButtonState) {
+  if (buttonState != lastButtonState)
+  {
     // if the state has changed, increment the counter
-    if (buttonState == HIGH) {
+    if (buttonState == HIGH)
+    {
       // if the current state is HIGH then the button went from off to on:
       resetGame();
       runGame = true;
-      promptUser();  // first promptUser 
+      promptUser(); // first promptUser
     }
     // Delay a little bit to avoid bouncing
     delay(50);
@@ -118,20 +125,22 @@ void checkStartGame() {
   lastButtonState = buttonState;
 }
 
-void gameOverWin(){
+void gameOverWin()
+{
   // output winning sound
   // make sure final score is still displayed
 }
 
-void gameOverLose(){
+void gameOverLose()
+{
   // output erroneous sound
   // make sure final score is still displayed
 }
 
-
-void resetGame(){
-  runGame = false;  // stop game
-  currentRound = 0;  // reset round
-  currentRoundPeriod = 3000;  // reset round period
+void resetGame()
+{
+  runGame = false;           // stop game
+  currentRound = 0;          // reset round
+  currentRoundPeriod = 3000; // reset round period
   previousMillis = millis();
 }
