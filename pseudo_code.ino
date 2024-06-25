@@ -10,16 +10,23 @@
 
 // input
 // 3 distinctly different inputs
-const int coinInput = 12;
-const int pullInput = 11;
-const int spinInput = 10;
+const int coinInput = 13;
+const int pullInput = 12;
+const int spinInput = 11;
 // start new game button
-const int startGameInput = 9;
+const int startGameInput = 10;
 
 // output
-// will actually consist of multiple output pins for LCD Display and Speaker
-const int displayOutput = 8;
-const int speakerOutput = 7;
+const int speakerOutput = 9;
+const int displayOutput1 = 8;
+const int displayOutput2 = 7;
+const int displayOutput3 = 6;
+const int displayOutput4 = 5;
+const int displayOutput5 = 4;
+const int displayOutput6 = 3;
+const int displayOutput7 = 2;
+const int displayOutput8 = 1;
+
 
 // DEFINE CONSTANTS
 
