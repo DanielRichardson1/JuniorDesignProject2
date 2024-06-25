@@ -4,6 +4,8 @@
 // Emmy Ploskina 6/17/2024
 // Lily Grech 6/19/2024
 
+#include <pitches.h>
+
 // DEFINE PINS
 
 // input
@@ -21,8 +23,8 @@ const int speakerOutput = 7;
 
 // DEFINE CONSTANTS
 
-// our 3 options to randomly pick from
-const int choices[] = {1, 2, 3}; // to get a choice: choice = choices[random(0, 3)]
+// our 3 options to randomly pick from 
+const int choices[] = {1, 2, 3};  // to get a choice: choice = choices[random(0, 3)]
 
 // DEFINE GLOBAL VARIABLES
 
@@ -46,13 +48,25 @@ unsigned int currentRound = 0;
 // Good goal: 3 seconds on first round -> 1 second on 99th round (20.2 ms decrements)
 unsigned long currentRoundPeriod = 3000;
 
-// State variables for start button (for edge detection)
-int buttonState = 0;
-int lastButtonState = 0;
+// State variables for edge detection
+int startButtonState = 0;
+int lastStartButtonState = 0;
+
+int coinButtonState = 0;
+int lastCoinButtonState = 0;
+
+int pullButtonState = 0;
+int lastPullButtonState = 0;
+
+int spinButtonState = 0;
+int lastSpinButtonState = 0;
+
+// global player input
+int playerInput = -1;  // -1 means we are waiting on an input
+
 
 // Setup I/O
-void setup()
-{
+void setup() {
   pinMode(coinInput, INPUT);
   pinMode(pullInput, INPUT);
   pinMode(spinInput, INPUT);
@@ -64,86 +78,289 @@ void setup()
   // interupts could be setup here
 }
 
-// Main Game Loop
-void loop()
-{
-  currentMillis = millis();
 
-  checkStartGame(); // check start game to either start game or reset
-  if (runGame)
-  {
-    // If input matches choice, successful
-    // TODO
-    // If input does not match choice, unsuccessful
-    // TODO
-    // If time runs out, unsuccessful
-    if (currentMillis - previousMillis > currentRoundPeriod)
-    {
+
+// Main Game Loop
+void loop() {
+  currentMillis = millis();
+ 
+  checkStartGame();  // check start game to either start game or reset
+  if(runGame){
+    checkInput();
+    if(playerInput != -1){
+      if(playerInput == choice){  // successful action
+        succesfulAttempt();
+      }
+      else if(playerInput != choice){  // unsuccessful action
+        gameOverLose();
+      }
+      playerInput = -1;  // reset input
+    }
+  // If time runs out, unsuccessful
+    if(currentMillis - previousMillis > currentRoundPeriod){
       gameOverLose();
     }
   }
+
 }
 
+
+
 // Prompt user for input
-void promptUser()
-{
+void promptUser() {
   choice = choices[random(0, 3)];
   // output sound cue of random choice
 }
 
 // Correct Button is Pressed within required time
-void successfulAttempt()
-{
+void successfulAttempt() {
   currentRound += 1;
   currentRoundPeriod -= 20.2;
   previousMillis = millis();
 
-  if (currentRound == 100)
-  {
+  if(currentRound == 100){
     gameOverWin();
   }
 
   promptUser();
 }
 
-void checkStartGame()
-{
+void checkStartGame() {
   // read the pushbutton input pin:
-  buttonState = digitalRead(startGameInput);
+  startButtonState = digitalRead(startGameInput);
   // compare the buttonState to its previous state
-  if (buttonState != lastButtonState)
-  {
+  if (startButtonState != lastStartButtonState) {
     // if the state has changed, increment the counter
-    if (buttonState == HIGH)
-    {
+    if (startButtonState == HIGH) {
       // if the current state is HIGH then the button went from off to on:
       resetGame();
       runGame = true;
-      promptUser(); // first promptUser
+      promptUser();  // first promptUser 
     }
     // Delay a little bit to avoid bouncing
     delay(50);
   }
   // save the current state as the last state, for next time through the loop
-  lastButtonState = buttonState;
+  lastStartButtonState = startButtonState;
 }
 
-void gameOverWin()
-{
+// Note: choice 1 = coin, 2 = pull, 3 = spin
+void checkInput() {
+  // read inputs
+  coinButtonState = digitalRead(coinButtonInput);
+  pullButtonState = digitalRead(pullButtonInput);
+  spinButtonState = digitalRead(spinButtonInput);
+  // check for changes, if HIGH then return input
+  if (coinButtonState != lastCoinButtonState){
+    if(coinButtonState == HIGH){
+      playerInput = 1;
+    }
+    delay(50);  // for debouncing
+  }
+  if (pullButtonState != lastPullButtonState){
+    if(pullButtonState == HIGH){
+      playerInput = 2;
+    }
+    delay(50);  // for debouncing
+  }
+  if (spinButtonState != lastSpinButtonState){
+    if(spinButtonState == HIGH){
+      playerInput = 3;
+    }
+    delay(50);  // for debouncing
+  }
+  // save the current state as the last state, for next time through the loop
+  lastCoinButtonState = coinButtonState;
+  lastPullButtonState = pullButtonState
+  lastSpinButtonState = spinButtonState
+}
+
+void gameOverWin(){
   // output winning sound
   // make sure final score is still displayed
 }
 
-void gameOverLose()
-{
+void gameOverLose(){
   // output erroneous sound
   // make sure final score is still displayed
 }
 
-void resetGame()
-{
-  runGame = false;           // stop game
-  currentRound = 0;          // reset round
-  currentRoundPeriod = 3000; // reset round period
+
+void resetGame(){
+  runGame = false;  // stop game
+  currentRound = 0;  // reset round
+  currentRoundPeriod = 3000;  // reset round period
   previousMillis = millis();
+}
+
+
+
+// ********************
+//
+// AUDIO
+//
+// ********************
+
+
+
+int melody[] = {
+  NOTE_E5, NOTE_E5, REST, NOTE_E5, REST, NOTE_C5, NOTE_E5,
+  NOTE_G5, REST, NOTE_G4, REST, 
+  NOTE_C5, NOTE_G4, REST, NOTE_E4,
+  NOTE_A4, NOTE_B4, NOTE_AS4, NOTE_A4,
+  NOTE_G4, NOTE_E5, NOTE_G5, NOTE_A5, NOTE_F5, NOTE_G5,
+  REST, NOTE_E5,NOTE_C5, NOTE_D5, NOTE_B4,
+  NOTE_C5, NOTE_G4, REST, NOTE_E4,
+  NOTE_A4, NOTE_B4, NOTE_AS4, NOTE_A4,
+  NOTE_G4, NOTE_E5, NOTE_G5, NOTE_A5, NOTE_F5, NOTE_G5,
+  REST, NOTE_E5,NOTE_C5, NOTE_D5, NOTE_B4,
+};
+
+int durations[] = {
+  8, 8, 8, 8, 8, 8, 8,
+  4, 4, 8, 4, 
+  4, 8, 4, 4,
+  4, 4, 8, 4,
+  8, 8, 8, 4, 8, 8,
+  8, 4,8, 8, 4,
+  4, 8, 4, 4,
+  4, 4, 8, 4,
+  8, 8, 8, 4, 8, 8,
+  8, 4,8, 8, 4,
+  
+  
+  4, 8, 8, 8, 4, 8,
+  8, 8, 8, 8, 8, 8, 8, 8,
+  4, 4, 8, 4,
+  2, 2,
+  
+  4, 8, 8, 8, 4, 8,
+  8, 8, 8, 8, 8, 8, 8, 8,
+  4, 4, 8, 4,
+  2, 2,
+  
+  8, 4, 8, 8, 8, 4,
+  8, 4, 8, 2,
+  
+  8, 4, 8, 8, 8, 8, 8,
+  1, 
+  8, 4, 8, 8, 8, 4,
+  8, 4, 8, 2,
+  8, 8, 8, 8, 8, 8, 4,
+  4, 4, 4, 4, 
+  4, 8, 4, 4,
+  
+  4, 4, 8, 4,
+  8, 8, 8, 4, 8, 8,
+  8, 4, 8, 8, 4,
+  
+  4, 8, 4, 4,
+  4, 4, 8, 4,
+  8, 8, 8, 4, 8, 8,
+  8, 4, 8, 8, 4,
+  
+  8, 4, 8, 4, 4,
+  8, 4, 8, 2,
+  8, 8, 8, 8, 8, 8,
+  
+  8, 4, 8, 2,
+  8, 4, 8, 4, 4,
+  8, 4, 8, 2,
+  8, 4, 8, 8, 8, 8,
+  8, 4, 8, 2,
+  
+  8, 4, 8, 4, 4,
+  8, 4, 8, 2,
+  8, 8, 8, 8, 8, 8,
+  
+  8, 4, 8, 2,
+  8, 4, 8, 4, 4,
+  8, 4, 8, 2,
+  8, 4, 8, 8, 8, 8,
+  8, 4, 8, 2,
+  8, 4, 8, 8, 8, 8, 8,
+  1,
+  
+  8, 4, 8, 8, 8, 4,
+  8, 4, 8, 2,
+  8, 8, 8, 8, 8, 8, 4,
+  4, 4, 4, 4, 
+  8, 4, 8, 4, 4,
+  8, 4, 8, 2,
+  8, 8, 8, 8, 8, 8,
+  
+  8, 4, 8, 2,
+  8, 4, 8, 4, 4,
+  8, 4, 8, 2,
+  8, 4, 8, 8, 8, 8,
+  8, 4, 8, 2,
+  
+  //game over sound
+  4, 4, 4,
+  8, 8, 8, 8, 8, 8,
+  8, 8, 2
+};
+
+void playWinAudio()
+{
+  int size = sizeof(durations) / sizeof(int);
+
+  for (int note = 0; note < size; note++) {
+    //to calculate the note duration, take one second divided by the note type.
+    //e.g. quarter note = 1000 / 4, eighth note = 1000/8, etc.
+    int duration = 1000 / durations[note];
+    tone(speakerOutput, melody[note], duration);
+
+    //to distinguish the notes, set a minimum time between them.
+    //the note's duration + 30% seems to work well:
+    int pauseBetweenNotes = duration * 1.30;
+    delay(pauseBetweenNotes);
+
+    //stop the tone playing:
+    noTone(speakerOutput);
+  }
+}
+
+void playSuccessAudio()
+{
+  // Yes this is the mario coin sound
+  tone(speakerOutput,NOTE_B5,100);
+  delay(100);
+  tone(speakerOutput,NOTE_E6,750);
+  delay(700);
+  noTone(speakerOutput);
+}
+
+void playFailAudio()
+{
+  tone(speakerOutput,NOTE_E6,100);
+  delay(100);
+  tone(speakerOutput,NOTE_B5,750);
+  delay(700);
+  noTone(speakerOutput);
+}
+
+void playPromptAudio(int x)
+{
+  if(x == 1){
+    tone(speakerOutput,NOTE_B4,100);
+    delay(300);
+    noTone(speakerOutput);
+  }
+  else if(x == 2){
+    tone(speakerOutput,NOTE_B4,100);
+    delay(300);
+    tone(speakerOutput,NOTE_B5,100);
+    delay(300);
+    noTone(speakerOutput);
+  }
+  else{
+    tone(speakerOutput,NOTE_B4,100);
+    delay(300);
+    tone(speakerOutput,NOTE_B5,100);
+    delay(300);
+    tone(speakerOutput,NOTE_B6,100);
+    delay(300);
+    noTone(speakerOutput);
+  }
 }
