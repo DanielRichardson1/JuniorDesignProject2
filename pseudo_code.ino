@@ -184,11 +184,13 @@ void checkInput() {
 
 void gameOverWin(){
   // output winning sound
+  playWinAudio();
   // make sure final score is still displayed
 }
 
 void gameOverLose(){
   // output erroneous sound
+  playFailAudio();
   // make sure final score is still displayed
 }
 
