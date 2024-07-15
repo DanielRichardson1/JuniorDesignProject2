@@ -45,7 +45,7 @@ int choice;
 // We will constantly check this rather than use delays
 unsigned long currentMillis;
 // The time up until the start of the current round
-unsigned long previousMillis = 0;
+unsigned long previousMillis;
 
 // The current round count, should start at 0 and not exceed 99
 // Incremented by 1 every successful attempt, reset every time game ends
@@ -121,8 +121,6 @@ void setup() {
 
 // Main Game Loop
 void loop() {
-  currentMillis = millis();
- 
   checkStartGame();  // check start game to either start game or reset
   if(runGame){
     checkInput();
@@ -136,9 +134,9 @@ void loop() {
       playerInput = -1;  // reset input
     }
   // If time runs out, unsuccessful
-    // if(currentMillis - previousMillis > currentRoundPeriod){
-    //   gameOverLose();
-    // }
+    if((unsigned long)(millis() - previousMillis) > currentRoundPeriod){
+      gameOverLose();
+    }
   }
 }
 
