@@ -13,10 +13,10 @@
 // 3 distinctly different inputs
 const int coinInput = 6;  // 12
 const int pullInput = 9;  // 15
-const int spinInputA = 3;  // 5
-const int spinInputB = 2;  // 4
+#define ENC_A 2 // NEED to use this pin for interrupts
+#define ENC_B 3 // NEED to use this pin for interrupts
 // start new game button
-const int startGameInput = 1;  // 3
+const int startGameInput = 4;  // 6
 
 // output
 const int speakerOutput = 7;  // 13
@@ -25,8 +25,6 @@ const int displayOutput1 = 10;  // 16
 const int displayOutput2 = 13;  // 19
 const int displayOutput1Clear = 11;  // 17
 const int displayOutput2Clear = 12;  // 18
-
-
 
 // DEFINE CONSTANTS
 
@@ -53,38 +51,31 @@ unsigned int currentRound = 1;
 
 // The per-round delay, must decrement every correct attempt, reset every time game ends
 // Good goal: 3 seconds on first round -> 1 second on 99th round (20.2 ms decrements)
-unsigned long currentRoundPeriod = 3000;
+unsigned long currentRoundPeriod = 4000;
 
 // Bounce objects
 Bounce startDebouncer = Bounce();
 Bounce coinDebouncer = Bounce();
 Bounce pullDebouncer = Bounce();
-Bounce spinDebouncer = Bounce();
-
-// State variables for edge detection (DELETE LATER)
-int startButtonState = 0;
-int lastStartButtonState = 0;
-
-int coinButtonState = 0;
-int lastCoinButtonState = 0;
-
-int pullButtonState = 0;
-int lastPullButtonState = 0;
-
-int spinButtonState = 0;
-int lastSpinButtonState = 0;
 
 // global player input
 int playerInput = -1;  // -1 means we are waiting on an input
+
+// rotary encoder
+unsigned long _lastIncReadTime = micros();
+volatile int counter = 0;
 
 
 // Setup I/O
 void setup() {
   pinMode(coinInput, INPUT);
   pinMode(pullInput, INPUT);
-  pinMode(spinInputA, INPUT);
-  pinMode(spinInputB, INPUT);
   pinMode(startGameInput, INPUT);
+
+  pinMode(ENC_A, INPUT_PULLUP);
+  pinMode(ENC_B, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(ENC_A), read_encoder, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(ENC_B), read_encoder, CHANGE);
 
   pinMode(displayOutput1, OUTPUT);
   pinMode(displayOutput1Clear, OUTPUT);
@@ -103,9 +94,6 @@ void setup() {
   pullDebouncer.attach(pullInput);
   pullDebouncer.interval(25);
 
-  spinDebouncer.attach(spinInputA);
-  spinDebouncer.interval(25);
-
   // Set the display pins to LOW initially
   digitalWrite(displayOutput1, LOW);
   digitalWrite(displayOutput2, LOW);
@@ -119,7 +107,14 @@ void setup() {
 
 
 
+
+
+// ********************
+//
 // Main Game Loop
+//
+// ********************
+
 void loop() {
   checkStartGame();  // check start game to either start game or reset
   if(runGame){
@@ -139,6 +134,8 @@ void loop() {
     }
   }
 }
+
+
 
 
 
@@ -188,7 +185,6 @@ void checkStartGame() {
 void checkInput() {
   coinDebouncer.update();
   pullDebouncer.update();
-  spinDebouncer.update();
 
   if (coinDebouncer.fell()) {
     playerInput = 1;
@@ -196,9 +192,45 @@ void checkInput() {
   if (pullDebouncer.fell()) {
     playerInput = 2;
   }
-  if (spinDebouncer.fell()) {
+
+  // rotary encoder
+  volatile int SpinState = 0;
+  static int lastCounter = 0;
+  static int lastSpinState = 0;
+
+  // if count has changed print the new value to serial
+  if (counter != lastCounter)
+  {
     playerInput = 3;
+    lastCounter = counter;
+    SpinState = 1;
   }
+}
+
+void read_encoder() 
+{
+  //encoder interrput routine for both pins. updates counter if they
+  //are valid and have rotated a full indent
+
+  static uint8_t old_AB = 3; // lookup table index
+  static int8_t encval = 0; // enocder value
+  static const int8_t enc_states[] = {0,-1,1,0,1,0,0,-1,-1,0,0,1,0,1,-1,0}; // lookup table
+
+  old_AB <<=2; // remember previous state
+
+  if (digitalRead(ENC_A)) old_AB |= 0x02; // add current state of pin A
+  if (digitalRead(ENC_B)) old_AB |= 0x01; // add current state of pin B 
+
+  encval += enc_states[( old_AB & 0x0f )];
+
+  // update counter if encoder has rotated a full indent, that is at least 4 steps
+  if ( encval > 3)
+  {
+    _lastIncReadTime = micros();
+    counter = counter + 1;
+    encval = 0;
+  }
+
 }
 
 void gameOverWin(){
