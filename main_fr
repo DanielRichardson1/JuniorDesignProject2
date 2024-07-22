@@ -1,0 +1,454 @@
+// Github Signatures Here:
+
+// Daniel Richardson 6/17/2024
+// Emmy Ploskina 6/17/2024
+// Lily Grech 6/19/2024
+
+#include "pitches.h"
+#include "Bounce2.h"
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
+// Set LCD
+// LiquidCrystal_I2C lcd(0x27, 16, 2);  // Set the LCD address to 0x27 for a 16 chars and 2 line display
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+// SCL to A5
+// SDA to A4
+
+// DEFINE PINS
+
+// input
+// 3 distinctly different inputs
+
+const int coinInput = 6;  // 12
+int coinState = LOW;
+int val = 0;
+//int pirCheck = 6;
+
+
+const int pullInput = 9;  // 15
+int pullState = HIGH;
+
+
+#define ENC_A 2 // NEED to use this pin for interrupts
+#define ENC_B 3 // NEED to use this pin for interrupts
+// start new game button
+const int startGameInput = 4;  // 6
+
+// output
+const int speakerOutput = 7;  // 13
+const int ledOutput = 8;  // 14  
+const int displayOutput1 = 10;  // 16
+const int displayOutput2 = 13;  // 19
+const int displayOutput1Clear = 11;  // 17
+const int displayOutput2Clear = 12;  // 18
+
+// DEFINE CONSTANTS
+
+// our 3 options to randomly pick from 
+const int choices[] = {1, 2, 3};  // to get a choice: choice = choices[random(0, 3)]
+
+// DEFINE GLOBAL VARIABLES
+
+// Should the game be running?
+bool runGame = false;
+
+// Our choice needs to be a global for easy access across functions
+int choice, lastChoice;
+
+// The current time in ms
+// We will constantly check this rather than use delays
+unsigned long currentMillis;
+// The time up until the start of the current round
+unsigned long previousMillis;
+
+// The current round count, should start at 0 and not exceed 99
+// Incremented by 1 every successful attempt, reset every time game ends
+unsigned int currentRound = 1;
+
+// The per-round delay, must decrement every correct attempt, reset every time game ends
+// Good goal: 3 seconds on first round -> 1 second on 99th round (20.2 ms decrements)
+unsigned long currentRoundPeriod = 6000;
+
+// Bounce objects
+Bounce startDebouncer = Bounce();
+Bounce pullDebouncer = Bounce();
+// Bounce coinDebouncer = Bounce();
+
+// global player input
+int playerInput = -1;  // -1 means we are waiting on an input
+
+// rotary encoder
+unsigned long _lastIncReadTime = micros();
+volatile int counter = 0;
+
+
+// Setup I/O
+void setup() {
+  pinMode(coinInput, INPUT);
+//  pinMode(pirCheck, OUTPUT);
+  pinMode(pullInput, INPUT);
+  pinMode(startGameInput, INPUT);
+
+  pinMode(ENC_A, INPUT_PULLUP);
+  pinMode(ENC_B, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(ENC_A), read_encoder, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(ENC_B), read_encoder, CHANGE);
+
+  pinMode(displayOutput1, OUTPUT);
+  pinMode(displayOutput1Clear, OUTPUT);
+  pinMode(displayOutput2, OUTPUT);
+  pinMode(displayOutput2Clear, OUTPUT);
+  pinMode(speakerOutput, OUTPUT);
+  pinMode(ledOutput, OUTPUT);
+
+  // Attach debouncers to button pins
+  startDebouncer.attach(startGameInput);
+  startDebouncer.interval(25);
+
+  pullDebouncer.interval(25);
+
+  // Set the display pins to LOW initially
+  digitalWrite(displayOutput1, LOW);
+  digitalWrite(displayOutput2, LOW);
+  digitalWrite(displayOutput1Clear, LOW);
+  digitalWrite(displayOutput2Clear, LOW);
+  
+  // clear counters
+  clearDisplay('A');
+  clearDisplay('B');
+
+  // initialize the LCD
+  lcd.begin();
+
+  // Turn on the blacklight
+  lcd.setBacklight((uint8_t)1); 
+  lcd.setCursor(8, 1);
+  lcd.print("Press to Play!");
+}
+
+
+
+
+
+
+// ********************
+//
+// Main Game Loop
+//
+// ********************
+
+void loop() {
+  checkStartGame();  // check start game to either start game or reset
+  if(runGame){
+    checkInput();
+    if(playerInput != -1){
+      if(playerInput == choice){  // successful action
+        successfulAttempt();
+      }
+      else{  // unsuccessful action
+        gameOverLose();
+      }
+      playerInput = -1;  // reset input
+    }
+  // If time runs out, unsuccessful
+      if((unsigned long)(millis() - previousMillis) > currentRoundPeriod){
+      gameOverLose();
+    }
+  }
+}
+
+
+
+
+
+// Prompt user for input
+void promptUser() {
+  previousMillis = millis();
+  lastChoice = choice;
+  choice = choices[random(0, 3)];
+  // does not match last choice
+  while(choice == lastChoice){
+    choice = choices[random(0, 3)];
+  }
+  // output sound cue of random choice
+  playPromptAudio(choice);
+}
+
+// Correct Button is Pressed within required time
+void successfulAttempt() {
+  delay(250);  // small delay so noise comes slightly after input (also gives time for PIR to reset)
+  // display
+  if(currentRound%10){
+    incrementDisplay('A');
+  }else{
+    incrementDisplay('A');
+    delay(10);
+    clearDisplay('A');
+    delay(200);
+    incrementDisplay('B');
+    }
+  
+  // LCD
+  lcd.clear();
+  lcd.print((String)currentRound);
+
+  // logic
+  currentRound += 1;
+  currentRoundPeriod -= 20.2;
+
+  if(currentRound > 99){
+    gameOverWin();
+  }
+  else{
+    promptUser();
+  }
+}
+
+void checkStartGame() {
+  startDebouncer.update();
+  if (startDebouncer.fell()) {
+    resetGame();
+    runGame = true;
+    promptUser();  // first promptUser 
+  }
+}
+
+// Note: choice 1 = coin, 2 = pull, 3 = spin
+void checkInput() {
+  // coin
+
+  // assumes PIR handles its own debouncing (which it should)
+ 
+  val = digitalRead(coinInput);  // read input value
+  if (val == HIGH) {            // check if the input is HIGH
+    //digitalWrite(pirCheck, HIGH);  // turn LED ON
+    if (coinState == LOW) {
+      // we have just turned on
+      //Serial.println("Motion detected!");
+      playerInput = 1;
+      delay(200);
+      // We only want to print on the output change, not state
+     coinState = HIGH;
+    }
+  } 
+
+
+  else {
+    //digitalWrite(pirCheck, LOW); // turn LED OFF
+    if (coinState == HIGH){
+      // we have just turned of
+      //Serial.println("Motion ended!");
+      // We only want to print on the output change, not state
+      coinState = LOW;
+    }
+  }
+
+
+
+  // assumes PIR does not handle debouncing (also would have to uncomment other coinDebouncer statements above)
+  // coinDebouncer.update();
+  // if(coinDebouncer.rose()) {
+  //   playerInput = 1;
+  // }
+
+  // lever
+
+
+  //pullDebouncer.update();
+  //if (pullDebouncer.fell()) {
+  //  playerInput = 2;
+  //}
+
+  pullState = digitalRead(pullInput);
+
+  if (pullState == LOW)
+  {
+    playerInput = 2;
+    pullState == HIGH;
+  }
+
+
+
+  // rotary encoder
+  volatile int SpinState = 0;
+  static int lastCounter = 0;
+  static int lastSpinState = 0;
+
+  // if count has changed print the new value to serial
+  if (counter < lastCounter - 8)
+  {
+    playerInput = 3;
+    lastCounter = counter;
+    SpinState = 1;
+    delay(400);
+  }
+}
+
+void read_encoder() 
+{
+  //encoder interrput routine for both pins. updates counter if they
+  //are valid and have rotated a full indent
+
+  static uint8_t old_AB = 3; // lookup table index
+  static int8_t encval = 0; // enocder value
+  static const int8_t enc_states[] = {0,-1,1,0,1,0,0,-1,-1,0,0,1,0,1,-1,0}; // lookup table
+
+  old_AB <<=2; // remember previous state
+
+  if (digitalRead(ENC_A)) old_AB |= 0x02; // add current state of pin A
+  if (digitalRead(ENC_B)) old_AB |= 0x01; // add current state of pin B 
+
+  encval += enc_states[( old_AB & 0x0f )];
+
+  // update counter if encoder has rotated a full indent, that is at least 4 steps
+  
+  // this works
+  /*
+  if ( encval > 3)
+  {
+    _lastIncReadTime = micros();
+    counter = counter + 1;
+    encval = 0;
+  }
+  */
+
+  if (encval < -3)
+  {
+    _lastIncReadTime = micros();
+    counter = counter - 1;
+    encval = 0;
+  }
+
+}
+
+void gameOverWin(){
+  // output winning sound
+  playWinAudio();
+  // end game
+  runGame = false;
+}
+
+void gameOverLose(){
+  // output erroneous sound
+  playFailAudio();
+  digitalWrite(ledOutput, HIGH);
+  delay(100);
+  digitalWrite(ledOutput, LOW);
+  delay(100);
+  digitalWrite(ledOutput, HIGH);
+  delay(100);
+  digitalWrite(ledOutput, LOW);
+  // end game
+  runGame = false;
+}
+
+void resetGame(){
+  // display
+  clearDisplay('A');
+  clearDisplay('B');
+  // lcd
+  lcd.clear();
+  // logic
+  runGame = false;  // stop game
+  currentRound = 1;  // reset round
+  currentRoundPeriod = 6000;  // reset round period
+  playerInput = -1;  // reset player input incase early exit
+}
+
+// ********************
+//
+// DISPLAY
+//
+// ********************
+
+
+void incrementDisplay(char display) {
+  if (display == 'A') {
+    digitalWrite(displayOutput1, LOW);
+    delay(10);
+    digitalWrite(displayOutput1, HIGH);
+  } else if (display == 'B') {
+    digitalWrite(displayOutput2, LOW);
+    delay(10);
+    digitalWrite(displayOutput2, HIGH);
+  }
+  delay(10);
+}
+
+void clearDisplay(char display) {
+  // clear
+  if(display == 'A'){
+    digitalWrite(displayOutput1Clear, LOW);
+    delay(10);
+    digitalWrite(displayOutput1Clear, HIGH);
+    incrementDisplay('A');
+  }
+  else{
+    digitalWrite(displayOutput2Clear, LOW);
+    delay(10);
+    digitalWrite(displayOutput2Clear, HIGH);
+    incrementDisplay('B');
+  }
+}
+
+// ********************
+//
+// AUDIO
+//
+// ********************
+
+void playWinAudio()
+{
+  for(int i = 0; i < 5; i++){
+    playSuccessAudio();
+    checkStartGame();
+  }
+}
+
+void playSuccessAudio()
+{
+  // Yes this is the mario coin sound
+  tone(speakerOutput,NOTE_B5,100);
+  delay(100);
+  tone(speakerOutput,NOTE_E6,750);
+  delay(700);
+  noTone(speakerOutput);
+}
+
+void playFailAudio()  // D# C F#
+{
+  tone(speakerOutput,NOTE_DS4,300);
+  delay(300);
+  tone(speakerOutput,NOTE_C4,300);
+  delay(300);
+  tone(speakerOutput,NOTE_FS3,1000);
+  delay(300);
+  noTone(speakerOutput);
+}
+
+void playPromptAudio(int x)
+{
+  if(x == 1){
+    tone(speakerOutput,NOTE_B4,100);
+    delay(300);
+    noTone(speakerOutput);
+  }
+  else if(x == 2){
+    tone(speakerOutput,NOTE_B4,100);
+    delay(300);
+    tone(speakerOutput,NOTE_B5,100);
+    delay(300);
+    noTone(speakerOutput);
+  }
+  else{
+    tone(speakerOutput,NOTE_B4,100);
+    delay(300);
+    tone(speakerOutput,NOTE_B5,100);
+    delay(300);
+    tone(speakerOutput,NOTE_B6,100);
+    delay(300);
+    noTone(speakerOutput);
+  }
+}
