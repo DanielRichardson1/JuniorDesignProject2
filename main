@@ -4,15 +4,32 @@
 // Emmy Ploskina 6/17/2024
 // Lily Grech 6/19/2024
 
-#include <pitches.h>
-#include <Bounce2.h>
+#include "pitches.h"
+#include "Bounce2.h"
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
+// Set LCD
+// LiquidCrystal_I2C lcd(0x27, 16, 2);  // Set the LCD address to 0x27 for a 16 chars and 2 line display
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+// SCL to A5
+// SDA to A4
 
 // DEFINE PINS
 
 // input
 // 3 distinctly different inputs
+
 const int coinInput = 6;  // 12
+int coinState = LOW;
+int val = 0;
+
+
 const int pullInput = 9;  // 15
+int pullState = HIGH;
+
+
 #define ENC_A 2 // NEED to use this pin for interrupts
 #define ENC_B 3 // NEED to use this pin for interrupts
 // start new game button
@@ -37,7 +54,7 @@ const int choices[] = {1, 2, 3};  // to get a choice: choice = choices[random(0,
 bool runGame = false;
 
 // Our choice needs to be a global for easy access across functions
-int choice;
+int choice, lastChoice;
 
 // The current time in ms
 // We will constantly check this rather than use delays
@@ -51,12 +68,11 @@ unsigned int currentRound = 1;
 
 // The per-round delay, must decrement every correct attempt, reset every time game ends
 // Good goal: 3 seconds on first round -> 1 second on 99th round (20.2 ms decrements)
-unsigned long currentRoundPeriod = 4000;
+unsigned long currentRoundPeriod = 6000;
 
 // Bounce objects
 Bounce startDebouncer = Bounce();
 Bounce pullDebouncer = Bounce();
-// Bounce coinDebouncer = Bounce();
 
 // global player input
 int playerInput = -1;  // -1 means we are waiting on an input
@@ -69,6 +85,7 @@ volatile int counter = 0;
 // Setup I/O
 void setup() {
   pinMode(coinInput, INPUT);
+//  pinMode(pirCheck, OUTPUT);
   pinMode(pullInput, INPUT);
   pinMode(startGameInput, INPUT);
 
@@ -88,11 +105,7 @@ void setup() {
   startDebouncer.attach(startGameInput);
   startDebouncer.interval(25);
 
-  pullDebouncer.attach(pullInput);
   pullDebouncer.interval(25);
-
-  // coinDebouncer.attach(coinInput);
-  // coinDebouncer.interval(25);
 
   // Set the display pins to LOW initially
   digitalWrite(displayOutput1, LOW);
@@ -103,7 +116,16 @@ void setup() {
   // clear counters
   clearDisplay('A');
   clearDisplay('B');
+
+  // initialize the LCD
+  lcd.begin();
+
+  // Turn on the blacklight
+  lcd.setBacklight((uint8_t)1); 
+  lcd.setCursor(8, 1);
+  lcd.print("Press to Play!");
 }
+
 
 
 
@@ -127,10 +149,9 @@ void loop() {
         gameOverLose();
       }
       playerInput = -1;  // reset input
-      // delay(10);  // debounce to avoid double inputs on RE or PIR
     }
   // If time runs out, unsuccessful
-    if((unsigned long)(micros() - previousMillis) > currentRoundPeriod){
+      if((unsigned long)(millis() - previousMillis) > currentRoundPeriod){
       gameOverLose();
     }
   }
@@ -142,8 +163,13 @@ void loop() {
 
 // Prompt user for input
 void promptUser() {
-  previousMillis = micros();
+  previousMillis = millis();
+  lastChoice = choice;
   choice = choices[random(0, 3)];
+  // does not match last choice
+  while(choice == lastChoice){
+    choice = choices[random(0, 3)];
+  }
   // output sound cue of random choice
   playPromptAudio(choice);
 }
@@ -161,6 +187,10 @@ void successfulAttempt() {
     delay(200);
     incrementDisplay('B');
     }
+  
+  // LCD
+  lcd.clear();
+  lcd.print((String)currentRound);
 
   // logic
   currentRound += 1;
@@ -187,22 +217,37 @@ void checkStartGame() {
 void checkInput() {
   // coin
 
-  // assumes PIR handles its own debouncing (which it should)
-  int coinState = digitalRead(coinInput);
-  if(coinState == HIGH){
-    playerInput = 1;
+  // debouncing for PIR
+
+  val = digitalRead(coinInput);  // read input value
+  if (val == HIGH) {            // check if the input is HIGH
+    //digitalWrite(pirCheck, HIGH);  // turn LED ON
+    if (coinState == LOW) {
+      // we have just turned on
+      //Serial.println("Motion detected!");
+      playerInput = 1;
+      delay(200);
+      // We only want to print on the output change, not state
+     coinState = HIGH;
+    }
+  } 
+
+  else {
+    //digitalWrite(pirCheck, LOW); // turn LED OFF
+    if (coinState == HIGH){
+      // we have just turned of
+      //Serial.println("Motion ended!");
+      // We only want to print on the output change, not state
+      coinState = LOW;
+    }
   }
 
-  // assumes PIR does not handle debouncing (also would have to uncomment other coinDebouncer statements above)
-  // coinDebouncer.update();
-  // if(coinDebouncer.rose()) {
-  //   playerInput = 1;
-  // }
+  pullState = digitalRead(pullInput);
 
-  // lever
-  pullDebouncer.update();
-  if (pullDebouncer.fell()) {
+  if (pullState == LOW)
+  {
     playerInput = 2;
+    pullState == HIGH;
   }
 
   // rotary encoder
@@ -211,11 +256,12 @@ void checkInput() {
   static int lastSpinState = 0;
 
   // if count has changed print the new value to serial
-  if (counter != lastCounter)
+  if (counter < lastCounter - 8)
   {
     playerInput = 3;
     lastCounter = counter;
     SpinState = 1;
+    delay(400);
   }
 }
 
@@ -236,10 +282,11 @@ void read_encoder()
   encval += enc_states[( old_AB & 0x0f )];
 
   // update counter if encoder has rotated a full indent, that is at least 4 steps
-  if ( encval > 3)
+
+  if (encval < -3)
   {
     _lastIncReadTime = micros();
-    counter = counter + 1;
+    counter = counter - 1;
     encval = 0;
   }
 
@@ -255,6 +302,13 @@ void gameOverWin(){
 void gameOverLose(){
   // output erroneous sound
   playFailAudio();
+  digitalWrite(ledOutput, HIGH);
+  delay(100);
+  digitalWrite(ledOutput, LOW);
+  delay(100);
+  digitalWrite(ledOutput, HIGH);
+  delay(100);
+  digitalWrite(ledOutput, LOW);
   // end game
   runGame = false;
 }
@@ -263,10 +317,12 @@ void resetGame(){
   // display
   clearDisplay('A');
   clearDisplay('B');
+  // lcd
+  lcd.clear();
   // logic
   runGame = false;  // stop game
   currentRound = 1;  // reset round
-  currentRoundPeriod = 3000;  // reset round period
+  currentRoundPeriod = 6000;  // reset round period
   playerInput = -1;  // reset player input incase early exit
 }
 
